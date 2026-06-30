@@ -5,6 +5,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import scraperController from './controllers/scraper.controller';
+import dbService from './services/firebase.service';
 
 const app = express();
 const server = http.createServer(app);
@@ -32,6 +33,20 @@ app.use(limiter);
 // Routes
 app.post('/api/jobs', (req, res) => scraperController.startScrape(req, res, io));
 app.get('/api/jobs/:jobId', (req, res) => scraperController.getJobStatus(req, res));
+
+// Leads API
+app.get('/api/leads', async (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit as string) || 1000;
+        const offset = parseInt(req.query.offset as string) || 0;
+        const search = req.query.search as string | undefined;
+
+        const leads = await dbService.getLeads(limit, offset, search);
+        res.status(200).json(leads);
+    } catch (error: any) {
+        res.status(500).json({ status: 'error', message: error.message });
+    }
+});
 
 // Health check
 app.get('/health', (req, res) => {

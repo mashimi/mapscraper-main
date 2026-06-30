@@ -5,6 +5,7 @@ import { Server } from 'socket.io';
 import { Lead } from '../models/scrape-job.model';
 import aiService from './ai.service';
 import { jobStore } from './job-store';
+import dbService from './firebase.service';
 
 puppeteer.use(StealthPlugin());
 
@@ -167,6 +168,8 @@ class ScraperService {
             jobStore.setJob(jobId, { jobId, progress: 95, status: 'running', data: allLeads });
             io.emit(`job_update_${jobId}`, { status: 'enriching', progress: 95 });
             const enrichedLeads = await aiService.enrichLeads(allLeads);
+
+            await dbService.saveLeads(jobId, enrichedLeads);
 
             jobStore.setJob(jobId, {
                 jobId,

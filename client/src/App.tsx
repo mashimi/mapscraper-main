@@ -17,10 +17,23 @@ export default function MapScraperPro() {
     const [location, setLocation] = useState('New York, NY');
     const [isScraping, setIsScraping] = useState(false);
 
+    const fetchLeadsFromDB = async () => {
+        try {
+            const res = await fetch(`${SOCKET_URL}/api/leads?limit=5000`);
+            const data = await res.json();
+            if (Array.isArray(data)) setLeads(data);
+        } catch (err) {
+            console.error('Failed to fetch leads from DB', err);
+        }
+    };
+
     useEffect(() => {
         socket.on('connect', () => {
             console.log('[Socket] Connected to server');
         });
+
+        // Fetch persisted leads from Firestore on mount
+        fetchLeadsFromDB();
 
         // CLEANUP: Remove all listeners when component unmounts
         return () => {
@@ -55,6 +68,9 @@ export default function MapScraperPro() {
 
         if (payload.status === 'completed' || payload.status === 'failed') {
             setIsScraping(false);
+            if (payload.status === 'completed') {
+                fetchLeadsFromDB();
+            }
         }
     }, []);
 
