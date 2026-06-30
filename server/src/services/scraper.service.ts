@@ -11,22 +11,31 @@ puppeteer.use(StealthPlugin());
 class ScraperService {
     private browser: Browser | null = null;
 
+    // Keep a single browser instance alive to save RAM and CPU
+    async getBrowser(): Promise<Browser> {
+        if (!this.browser || !this.browser.isConnected()) {
+            console.log('[ScraperService] Launching new shared browser instance...');
+            this.browser = await (puppeteer as any).launch({
+                headless: process.env.NODE_ENV === 'production', // Run headless in prod
+                args: [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-web-security',
+                    '--window-size=1280,1000'
+                ],
+                defaultViewport: null
+            }) as Browser;
+        }
+        return this.browser;
+    }
+
     async scrape(jobId: string, keyword: string, location: string, io: Server) {
         console.log(`[ScraperService] Starting Professional Deep Scrape: ${jobId}`);
-
-        const browser = await (puppeteer as any).launch({
-            headless: false,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-web-security',
-                '--window-size=1280,1000'
-            ],
-            defaultViewport: null
-        }) as Browser;
+        const browser = await this.getBrowser();
+        let page: Page | null = null;
 
         try {
-            const page = await browser.newPage();
+            page = await browser.newPage();
             const searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(keyword)}+in+${encodeURIComponent(location)}`;
             await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
@@ -58,6 +67,7 @@ class ScraperService {
             console.log(`[ScraperService] Found ${itemHandles.length} potential leads. Depth processing ${targetCount} items...`);
 
             let allLeads: Lead[] = [];
+            const seenLeads = new Set<string>(); // Prevent duplicate leads in the same run
 
             // 4. Detailed Extraction (Professional Method: Click & Read Sidebar)
             for (let i = 0; i < targetCount; i++) {
@@ -103,6 +113,11 @@ class ScraperService {
                         };
                     });
 
+                    // Skip duplicates
+                    const leadKey = `${details.name}-${details.phone}`;
+                    if (seenLeads.has(leadKey)) continue;
+                    seenLeads.add(leadKey);
+
                     let lead: Lead = {
                         ...details,
                         email: 'Finding...'
@@ -110,8 +125,9 @@ class ScraperService {
 
                     // 5. Deep Email Crawling
                     if (lead.website && lead.website.startsWith('http') && !lead.website.includes('google.com/maps')) {
+                        let contactPage: Page | null = null;
                         try {
-                            const contactPage = await browser.newPage();
+                            contactPage = await browser.newPage();
                             await contactPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36');
                             await contactPage.goto(lead.website, { waitUntil: 'domcontentloaded', timeout: 10000 });
 
@@ -127,6 +143,7 @@ class ScraperService {
                             await contactPage.close();
                         } catch (e) {
                             lead.email = 'Error';
+                            if (contactPage) await contactPage.close();
                         }
                     } else {
                         lead.email = 'No Website';
@@ -144,7 +161,7 @@ class ScraperService {
                 }
             }
 
-            await browser.close();
+            await page.close(); // Close tab, but keep browser alive!
 
             // 6. AI Enrichment
             jobStore.setJob(jobId, { jobId, progress: 95, status: 'running', data: allLeads });
@@ -172,7 +189,7 @@ class ScraperService {
                 error: error.message
             });
             io.emit(`job_update_${jobId}`, { status: 'failed', error: error.message });
-            if (browser) await browser.close();
+            if (page) await page.close();
         }
     }
 }

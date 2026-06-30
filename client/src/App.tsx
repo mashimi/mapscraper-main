@@ -22,8 +22,10 @@ export default function MapScraperPro() {
             console.log('[Socket] Connected to server');
         });
 
+        // CLEANUP: Remove all listeners when component unmounts
         return () => {
             socket.off('connect');
+            socket.removeAllListeners();
         };
     }, []);
 
@@ -36,22 +38,18 @@ export default function MapScraperPro() {
             return [{ id: payload.jobId, ...payload }, ...prev];
         });
 
-        if (payload.data) {
+        if (payload.data && Array.isArray(payload.data)) {
             setLeads(prev => {
-                // Create a map of existing leads for fast lookup
+                // Use a Map to deduplicate. Key by name + phone
                 const leadMap = new Map(prev.map(l => [`${l.name}-${l.phone}`, l]));
 
                 payload.data.forEach((newLead: Lead) => {
                     const key = `${newLead.name}-${newLead.phone}`;
-                    if (leadMap.has(key)) {
-                        // Merge enriched data (like sentiment) into existing lead
-                        leadMap.set(key, { ...leadMap.get(key)!, ...newLead });
-                    } else {
-                        leadMap.set(key, newLead);
-                    }
+                    // Merge new data into existing lead (handles AI enrichment updates perfectly)
+                    leadMap.set(key, { ...(leadMap.get(key) || {}), ...newLead });
                 });
 
-                return Array.from(leadMap.values()).sort((a, b) => 0); // Keep original order or sort as needed
+                return Array.from(leadMap.values());
             });
         }
 
@@ -82,7 +80,8 @@ export default function MapScraperPro() {
 
             setJobs(prev => [newJob, ...prev]);
 
-            // Listen for specific job updates
+            // FIX: Remove previous listener for this specific job before adding a new one
+            socket.off(`job_update_${data.jobId}`);
             socket.on(`job_update_${data.jobId}`, (payload) => {
                 handleJobUpdate({ ...payload, jobId: data.jobId });
             });
