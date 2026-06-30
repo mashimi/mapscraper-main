@@ -1,0 +1,10 @@
+{
+  "21ca23e64320c89c": {
+    "error": "Client error '429 Too Many Requests' for url 'http://localhost:4000/api/jobs/job_1782820616018'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/429",
+    "timestamp": 1782820725.9064155
+  },
+  "e2ca8a4df67ca2a0": {
+    "error": "Client error '429 Too Many Requests' for url 'http://localhost:4000/api/jobs/job_1782820615788'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/429",
+    "timestamp": 1782820728.3816552
+  }
+}
